@@ -44,7 +44,7 @@ the config is personal/gitignored, so there is nothing canonical to reset to).
    ```
    node ${CLAUDE_PLUGIN_ROOT}/lib/overrides.mjs set <overrides> <member> <field> <value>
    ```
-   (`field` ∈ `gates.<key>` | `knowledge.<slot>` | `knowledge.extra.<name>` | `note`.)
+   (`field` ∈ `stack` | `gates.<key>` | `knowledge.<slot>` | `knowledge.extra.<name>` | `note`.)
    Only record answers that differ from the detected
    default — an accepted default needs no override.
 4. **Derive + render the profile:**
@@ -103,9 +103,12 @@ through it:
    (ask global vs this-workspace). Remind the user it applies in a new session.
 4. **If a profile field:**
    - **Menu 2 — member:** pick from the real members.
-   - **Menu 3 — what to set:** a knowledge slot (`claude_md` / `skills` /
-     `rubrics`) · add/edit a custom **extra** link · a `gate` · append a `note`.
-   - **Value step (contextual):** a slot/gate/link
+   - **Menu 3 — what to set:** the member's **`stack` label** · a knowledge slot
+     (`claude_md` / `skills` / `rubrics`) · add/edit a custom **extra** link · a
+     `gate` · append a `note`.
+   - **Value step (contextual):** a `stack` → ask for a short free-text label
+     (e.g. `Rust`, `Claude Code plugin (markdown + zero-dep node .mjs)`); no
+     disk-existence check applies. A slot/gate/link
      path → ask the path and **offer to check it exists on disk** (Glob/Read); an
      `extra` link → ask the link **name** then the path. **The `skills` slot is the
      single `.claude/skills` FOLDER path — never a list, never one entry per skill

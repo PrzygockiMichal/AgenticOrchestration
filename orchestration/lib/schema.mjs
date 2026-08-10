@@ -197,7 +197,9 @@ export function validateConfig(obj, { partial = false } = {}) {
 // Every field is optional (a sparse override), but present fields are strict:
 // fixed slots / gate keys are allowlisted so a typo fails loudly. Only
 // `knowledge.extra` is free-form (arbitrary link names → string paths).
-const OVERRIDE_MEMBER_KEYS = new Set(["gates", "knowledge", "notes"]);
+// `stack` is a strict scalar: a plain string label replacing the detected
+// stack (never null — the member field is required-string; removal is `unset`).
+const OVERRIDE_MEMBER_KEYS = new Set(["stack", "gates", "knowledge", "notes"]);
 
 export function validateOverrides(obj) {
   const errs = [];
@@ -217,6 +219,7 @@ export function validateOverrides(obj) {
     for (const k of Object.keys(mo)) {
       if (!OVERRIDE_MEMBER_KEYS.has(k)) errs.push(`${p}: unknown override key "${k}"`);
     }
+    if (mo.stack !== undefined) checkType(errs, `${p}.stack`, mo.stack, isString, "string (a stack label)");
     if (mo.gates !== undefined) {
       if (mo.gates == null || typeof mo.gates !== "object" || Array.isArray(mo.gates)) {
         errs.push(`${p}.gates: expected an object`);
