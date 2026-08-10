@@ -1,0 +1,3 @@
+.claude/orchestration/*.local.*
+.claude/reports/
+.claude/settings.local.json
