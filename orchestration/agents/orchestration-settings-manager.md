@@ -40,7 +40,11 @@ overrides. `update` is correct by construction: re-detect, re-apply the same ove
 - **The scripts decide; you don't guess.** Every fact comes from `detect.mjs`, which
   emits `decisions_needed` for anything ambiguous. Do not invent or silently override
   facts. If a fact looks wrong, flag it in `NOTES` (and raise a decision if it changes
-  scope) — never edit it in place.
+  scope) — never edit it in place. **Exception — stack:** a wrong or unrecognized
+  stack is never parked as a note; it is relayed as a decision and resolved by the
+  command via the durable stack override
+  (`overrides.mjs set <overrides> <member> stack <label>`). `NOTES` remains the home
+  only for odd facts that have no override field.
 - **Read-only on code.** You may run read-only commands and read any file. You WRITE
   only the detected **draft** and (when asked) a scratch detected/derived JSON. You do
   NOT write `overrides.local.json`, the final profile, `.gitignore`, or member code —
@@ -68,7 +72,10 @@ Use these exact paths; do not hand-derive them.
    **1** = script errored → capture stderr and report it, do not hand-roll a substitute.
 2. **Sanity-check — don't redo.** Spot-check two or three facts against the repo (a
    gate string, a branch, a stack label, a knowledge link). Note genuine misdetections in
-   `NOTES`; raise a decision only if one changes a disposition. **Knowledge links come
+   `NOTES`; raise a decision only if one changes a disposition. A misdetected stack
+   label is an override-able fact, not a note: `detect.mjs` already raises the
+   unknown-with-sources decision itself, and for a *mislabeled* (not unknown) stack
+   you add a decision recommending a `stack` override — never edit or note the value. **Knowledge links come
    from `detect.mjs` verbatim — the `skills` link is the single `.claude/skills` FOLDER,
    never per-skill. Do not expand it into individual skills, and never add per-skill
    entries to `extra`; Claude Code discovers the skills inside the folder itself.**

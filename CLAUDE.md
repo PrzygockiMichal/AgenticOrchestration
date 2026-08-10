@@ -37,10 +37,13 @@ meta-repo: the plugin developed here is also installed and running in this very 
 
 ## Checks
 
-There are no configured gates (no test runner or linter is set up on this branch).
-Minimum bar for `lib/` changes: `node --check <file>` passes and the script's own
-CLI smoke-runs (e.g. `node orchestration/lib/detect.mjs .`). Schema changes must keep
-`schema.mjs` validation and every writer that feeds it in sync.
+The repo has a zero-dep `node:test` suite under `tests/`. Minimum bar for `lib/`
+changes: `node --check <file>` passes, the full suite is green via
+`node --test "tests/*.test.mjs"` (the bare-directory form `node --test tests/` is
+broken on Windows/node 22 — always use the glob), and the script's own CLI
+smoke-runs (e.g. `node orchestration/lib/detect.mjs .`). Behavior changes come with
+tests. Schema changes must keep `schema.mjs` validation and every writer that feeds
+it in sync.
 
 ## Docs to read before working here
 
