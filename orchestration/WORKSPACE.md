@@ -206,16 +206,18 @@ invented value.
    - **true** → `single-repo` or `monorepo`. From `git rev-parse --show-toplevel`,
      count distinct sub-project markers (a `workspaces` field in root `package.json`;
      `pnpm-workspace.yaml`; `nx.json`/`turbo.json`/`lerna.json`; or >1
-     `package.json`/`pyproject.toml`/`go.mod` in distinct subdirs, excluding
-     `node_modules`/`vendor`/`dist`/`build`). >1 → `monorepo`; else `single-repo`.
+     `package.json`/`pyproject.toml`/`go.mod`/`Cargo.toml`/`pom.xml`/`build.gradle(.kts)`
+     in distinct subdirs, excluding `node_modules`/`vendor`/`dist`/`build`/`.git`).
+     >1 → `monorepo`; else `single-repo`.
    - **false/error** → scan immediate children (`for d in */; do [ -d "$d/.git" ] && echo "$d"; done`).
      ≥1 child repo → `multi-repo`; 0 → nothing to orchestrate (block; ask where code lives).
 
 2. **Per-member facts** (commands, not guesses):
    - `path` (relative to workspace root; `.` for single-repo)
    - `git` + `default_branch` (`git -C <path> symbolic-ref --short HEAD`)
-   - `stack` (read `package.json` deps, `pyproject.toml`/`requirements.txt`,
-     `go.mod`, `pom.xml`, `Cargo.toml`, Dockerfiles/`docker-compose*.yml`)
+   - `stack` (read `package.json` deps, `pyproject.toml`/`requirements.txt`/notebooks,
+     `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`(.kts), `docker-compose*.yml`;
+     a lone Dockerfile is deliberately NOT a stack signal)
    - `claude_md` present? (absent is allowed but flagged — gates will be weaker)
    - `gates` from `package.json` scripts (`lint`/`test`/`test:e2e`/`build`/`typecheck`,
      exact command strings) or the stack equivalent. No script → `none` (never fabricate).
@@ -277,7 +279,7 @@ not parse it programmatically.
     "path": "<relative to workspace_root; '.' for single-repo>",
     "git": true,
     "default_branch": "<branch | null>",
-    "stack": "<e.g. NestJS/TS | Express/TS | Python | infra (docker-compose)>",
+    "stack": "<e.g. NestJS/TS | Express/TS | Python | Rust | Java (Maven) | infra (docker-compose)>",
     "claude_md": "present | absent",
     "gates": { "convention": "<cmd|null>", "lint": "<cmd|null>",
                "test": "<cmd|null>", "build": "<cmd|null>" },   // null = no gate (never fabricated)

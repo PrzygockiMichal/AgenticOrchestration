@@ -75,7 +75,7 @@ function detectTopology(root) {
 // manifest. Paths are relative to the repo root and POSIX-normalized so profiles
 // are stable across platforms. Returns actual member paths — never placeholders.
 function subProjectDirs(top) {
-  const manifests = ["package.json", "pyproject.toml", "go.mod"];
+  const manifests = ["package.json", "pyproject.toml", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts"];
   const found = new Set();
   const walk = (dir, depth) => {
     if (depth > 2) return;
@@ -146,6 +146,15 @@ function classifyStack(abs) {
       isResearch: !isWeb && (notebooks || isML) };
   }
   if (exists(path.join(abs, "go.mod"))) return { kind: "go", label: "Go", isFront: false, isBack: true };
+  // Rust / Java — presence-only detection, no `pkg`, so gates derive to all-null.
+  // Gates come only from manifest-declared command strings; `cargo test`/`mvn test`
+  // are toolchain conventions, not manifest facts (wrappers like ./mvnw make them
+  // wrong), so rust/java gates stay null and the missing-gate decisions ask the user.
+  if (exists(path.join(abs, "Cargo.toml"))) return { kind: "rust", label: "Rust", isFront: false, isBack: false };
+  // pom.xml wins over gradle: Maven-primary repos commonly carry stray gradle files.
+  if (exists(path.join(abs, "pom.xml"))) return { kind: "java", label: "Java (Maven)", isFront: false, isBack: false };
+  if (exists(path.join(abs, "build.gradle")) || exists(path.join(abs, "build.gradle.kts")))
+    return { kind: "java", label: "Java (Gradle)", isFront: false, isBack: false };
   // infra-only?
   const composeFiles = exists(abs)
     ? fs.readdirSync(abs).filter((f) => /^docker-compose.*\.ya?ml$/.test(f))
@@ -205,7 +214,7 @@ function profileMember(root, rel, topology) {
   // fully usable — they just get no gate/CLAUDE.md prompts, since there is nothing
   // standard to ask about. No member is ever classified into an owning agent: the
   // architect picks each task's engineer from the task's nature + this stack.
-  const isCode = ["node", "python", "go"].includes(stack.kind);
+  const isCode = ["node", "python", "go", "rust", "java"].includes(stack.kind);
 
   if (branch && !DEFAULT_BRANCHES.has(branch))
     notes.push(`on branch "${branch}" (not a long-lived default) — re-verify diff baseline per run`);

@@ -1,6 +1,6 @@
 // Tests for the overrides engine (orchestration/lib/overrides.mjs), with a
 // focus on the `stack` override field. First test suite in the repo: plain
-// node:test + node:assert/strict, zero deps, run with `node --test tests/`.
+// node:test + node:assert/strict, zero deps, run with `node --test "tests/*.test.mjs"`.
 //
 // Error paths (die() → process.exit) are asserted by running the CLI in a
 // subprocess (spawnSync) and checking exit status + stderr — die() would kill
