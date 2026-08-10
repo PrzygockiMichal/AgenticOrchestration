@@ -246,6 +246,10 @@ Raise a decision for:
 - **Ambiguous topology** (e.g. a repo that is both an app and a set of packages).
 - **Missing `CLAUDE.md`** — generate a minimal one / proceed with reduced context.
 - **Unresolved gate** for a code member (e.g. no detectable test command).
+- **Unrecognized stack** for a member that contains source files (deterministic
+  check: tracked/untracked non-ignored files against a source-extension allowlist) —
+  confirm/label what the member is; the answer is recorded as a durable `stack`
+  override. Infra-only and source-less members are not asked.
 
 Do NOT ask about: detected stack, detected branch, gate commands that were found,
 profile/report locations, or the standard defaults below (record them, let the user

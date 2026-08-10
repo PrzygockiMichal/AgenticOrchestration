@@ -21,6 +21,13 @@ import { WORKSPACE_SCHEMA, validateWorkspace } from "./schema.mjs";
 import { pluginVersion } from "./version.mjs";
 
 const IGNORE_DIRS = new Set(["node_modules", "vendor", "dist", "build", ".git"]);
+// Allowlist for the unknown-with-sources check: presence of any such file makes an
+// unrecognized member a code-ambiguity that must surface as a decision.
+const SOURCE_EXTENSIONS = new Set([
+  ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".py", ".go", ".rs", ".java",
+  ".kt", ".kts", ".rb", ".php", ".cs", ".c", ".h", ".cpp", ".cc", ".hpp",
+  ".sh", ".ps1", ".swift", ".scala",
+]);
 const DEFAULT_BRANCHES = new Set(["main", "master"]);
 
 const FRONTEND_RE = /^(react|vue|svelte|next|@angular\/core|@sveltejs\/kit)$|^vite$/;
@@ -113,6 +120,40 @@ function hasNotebooks(abs) {
       try { return fs.readdirSync(path.join(abs, d.name)).some((f) => f.endsWith(".ipynb")); }
       catch { return false; }
     });
+}
+
+// Does the member contain source files (per SOURCE_EXTENSIONS)? Used only for
+// kind=unknown members, where "has sources but no recognized manifest" must become
+// a `decisions_needed` entry instead of silence. Deterministic: a git listing or a
+// file walk, never a guess.
+//   Branch 1 (git): `ls-files --cached --others --exclude-standard`. `--others
+//   --exclude-standard` is load-bearing — a freshly-initialized/mid-setup repo has
+//   UNTRACKED source files (they count), while gitignored junk must not count.
+//   Branch 2 (not a repo / git unavailable): bounded filesystem walk, depth ≤ 4.
+// Both branches apply the SAME filters — the SOURCE_EXTENSIONS allowlist, plus
+// exclusion of any path with an IGNORE_DIRS or dot-directory segment (user ruling:
+// e.g. CI scripts under `.github/` alone do NOT make a member "code") — so the two
+// branches answer identically on the same tree, except that only git knows
+// .gitignore and only the walk is depth-capped.
+function hasSourceFiles(abs) {
+  const isSource = (name) => SOURCE_EXTENSIONS.has(path.extname(name).toLowerCase());
+  const skipDir = (name) => IGNORE_DIRS.has(name) || name.startsWith(".");
+  const listed = git(abs, ["ls-files", "--cached", "--others", "--exclude-standard"]);
+  if (listed !== null) {
+    return listed.split("\n").some((line) => {
+      if (!line) return false;
+      const segs = line.split("/"); // git emits POSIX paths
+      return isSource(segs[segs.length - 1]) && !segs.slice(0, -1).some(skipDir);
+    });
+  }
+  const walk = (dir, depth) => {
+    if (depth > 4) return false;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    if (entries.some((e) => e.isFile() && isSource(e.name))) return true;
+    return entries.some((e) => e.isDirectory() && !skipDir(e.name) && walk(path.join(dir, e.name), depth + 1));
+  };
+  return walk(abs, 1);
 }
 
 function classifyStack(abs) {
@@ -211,14 +252,19 @@ function profileMember(root, rel, topology) {
   const gates = extractGates(stack.pkg && stack.pkg.scripts, notes);
   // A "code" member is one an engineering specialist would implement in (it has a
   // recognized language stack). infra-only / unknown members are still included and
-  // fully usable — they just get no gate/CLAUDE.md prompts, since there is nothing
-  // standard to ask about. No member is ever classified into an owning agent: the
-  // architect picks each task's engineer from the task's nature + this stack.
+  // fully usable. An unknown member WITH source files is a code-ambiguity: it gets
+  // the stack-unrecognized + CLAUDE.md decisions (never gate decisions — a gate
+  // command can't be sanity-checked before the stack is labeled); infra-only and
+  // truly source-less members stay silent. No member is ever classified into an
+  // owning agent: the architect picks each task's engineer from the task's nature
+  // + this stack.
   const isCode = ["node", "python", "go", "rust", "java"].includes(stack.kind);
+  // Only unknown members pay the source-scan cost; infra/code kinds never trigger it.
+  const hasSources = stack.kind === "unknown" ? hasSourceFiles(abs) : false;
 
   if (branch && !DEFAULT_BRANCHES.has(branch))
     notes.push(`on branch "${branch}" (not a long-lived default) — re-verify diff baseline per run`);
-  if (!claudeMd && isCode)
+  if (!claudeMd && (isCode || hasSources))
     notes.push("no CLAUDE.md — specialists operate with reduced project context");
   if (gates.lint == null && gates.convention == null && isCode)
     notes.push("no lint/format script — runs test+build gates only");
@@ -239,14 +285,24 @@ function profileMember(root, rel, topology) {
     knowledge: knowledgeLinks(abs, rel),
     notes,
   };
-  return { member, claudeMd, isCode };
+  return { member, claudeMd, isCode, hasSources };
 }
 
 // --- decisions --------------------------------------------------------------
 
-function decisionsFor(member, claudeMd, isCode) {
+function decisionsFor(member, claudeMd, isCode, hasSources) {
   const out = [];
-  if (!claudeMd && isCode) {
+  // Stack question first: it is the root ambiguity (push order = display order).
+  // The answer is recorded as a durable `stack` override (overrides.mjs set).
+  if (hasSources) {
+    out.push({
+      member: member.id,
+      question: `${member.id} has source files but no recognized manifest — what is this member's stack?`,
+      recommended: "provide a stack label (recorded as a stack override)",
+      options: ["<provide stack label>", "leave as unknown"],
+    });
+  }
+  if (!claudeMd && (isCode || hasSources)) {
     out.push({
       member: member.id,
       question: `${member.id} has no CLAUDE.md — how should specialists bind to it?`,
@@ -254,6 +310,8 @@ function decisionsFor(member, claudeMd, isCode) {
       options: ["generate minimal CLAUDE.md", "proceed with reduced context"],
     });
   }
+  // Gate decisions stay isCode-only (deliberately NOT raised for unknown-with-
+  // sources members — fixed plan-level exclusion).
   for (const k of ["test", "build"]) {
     if (member.gates[k] == null && isCode) {
       out.push({
@@ -284,9 +342,9 @@ function detect(rootArg) {
   const members = [];
   const decisions = [];
   for (const rel of relPaths) {
-    const { member, claudeMd, isCode } = profileMember(topo.root, rel, topo.topology);
+    const { member, claudeMd, isCode, hasSources } = profileMember(topo.root, rel, topo.topology);
     members.push(member);
-    decisions.push(...decisionsFor(member, claudeMd, isCode));
+    decisions.push(...decisionsFor(member, claudeMd, isCode, hasSources));
   }
 
   return {
@@ -320,4 +378,4 @@ if (isMain) {
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
 
-export { detect, detectTopology, classifyStack, extractGates, knowledgeLinks };
+export { detect, detectTopology, classifyStack, extractGates, knowledgeLinks, hasSourceFiles };
