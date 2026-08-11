@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Plugin config — the two workspace-behavior switches (both boolean, default ON):
+// Plugin config — the three workspace-behavior switches (all boolean, default ON):
 //   readiness_check          — the onboarding nudge when the workspace is UNconfigured
 //   proactive_orchestration  — when the workspace IS configured, prime the main session
 //                              to route code work through /orchestrate (off = on demand only)
+//   intelligence             — capture learned behavioral guidance from user corrections
+//                              and inject it into dispatch briefs (off = feature fully inert)
 // Setting 1 (plugin on/off everywhere) is Claude Code's built-in `enabledPlugins`
 // and is deliberately NOT modelled here.
 //

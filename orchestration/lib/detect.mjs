@@ -6,7 +6,7 @@
 // a `decisions_needed` entry, never an invented value.
 //
 // Usage:   node detect.mjs [workspace-root]      (defaults to cwd)
-// Output:  a workspace.json object (schema orchestration/workspace@3) on stdout,
+// Output:  a workspace.json object (schema orchestration/workspace@4) on stdout,
 //          with `decisions_needed` populated. The command/agent layer resolves
 //          those decisions into overrides.local.json and derives the profile
 //          via lib/overrides.mjs (detected ⊕ overrides).
@@ -227,8 +227,10 @@ function extractGates(s, notes) {
 
 // Resolve the fixed knowledge-link slots for a member (path relative to the
 // workspace root, matching member.path). A slot is the path if the artifact
-// exists on disk, else null. `rubrics` has no standard member location, so it
-// stays null here and is filled via overrides/extra when a user has one.
+// exists on disk (file OR directory — `intelligence` is the member's learned-
+// guidance DIRECTORY, like `skills`), else null. `rubrics` has no standard
+// member location, so it stays null here and is filled via overrides/extra
+// when a user has one.
 function knowledgeLinks(abs, rel) {
   const base = rel === "." ? "" : rel;
   const link = (sub) => (exists(path.join(abs, sub)) ? posix(path.join(base, sub)) : null);
@@ -236,6 +238,7 @@ function knowledgeLinks(abs, rel) {
     claude_md: link("CLAUDE.md"),
     skills: link(".claude/skills"),
     rubrics: null,
+    intelligence: link(".claude/orchestration/intelligence"),
     extra: {},
   };
 }

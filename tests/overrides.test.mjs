@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseField, applyOverrides } from "../orchestration/lib/overrides.mjs";
-import { validateWorkspace, OVERRIDES_SCHEMA } from "../orchestration/lib/schema.mjs";
+import { validateWorkspace, OVERRIDES_SCHEMA, WORKSPACE_SCHEMA, KNOWLEDGE_SLOTS } from "../orchestration/lib/schema.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OVERRIDES_CLI = path.join(HERE, "..", "orchestration", "lib", "overrides.mjs");
@@ -31,10 +31,11 @@ function cli(...args) {
 }
 function readJSON(p) { return JSON.parse(fs.readFileSync(p, "utf8")); }
 
-// Minimal valid workspace@3 detection fixture: one member, unknown stack.
+// Minimal valid workspace detection fixture: one member, unknown stack.
+// Built from the imported schema constants so schema bumps can't break it.
 function detectedFixture() {
   return {
-    schema: "orchestration/workspace@3",
+    schema: WORKSPACE_SCHEMA,
     generated: "2026-08-10T00:00:00Z",
     topology: "single-repo",
     workspace_root: "/ws",
@@ -47,7 +48,7 @@ function detectedFixture() {
       claude_md: "present",
       reports_dir: "/ws/.claude/reports",
       gates: { convention: null, lint: null, test: null, build: null },
-      knowledge: { claude_md: null, skills: null, rubrics: null, extra: {} },
+      knowledge: { ...Object.fromEntries(KNOWLEDGE_SLOTS.map((s) => [s, null])), extra: {} },
     }],
     defaults: { architect: "chuck-architect", parallelism: "serial", human_gate: "plan-and-integrate" },
   };

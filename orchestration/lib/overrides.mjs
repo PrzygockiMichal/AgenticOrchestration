@@ -153,7 +153,8 @@ export function applyOverrides(detected, overrides) {
     if (mo.stack !== undefined) m.stack = mo.stack;
     if (mo.gates) { m.gates = { ...m.gates }; for (const [k, v] of Object.entries(mo.gates)) m.gates[k] = v; }
     if (mo.knowledge) {
-      m.knowledge = m.knowledge || { claude_md: null, skills: null, rubrics: null, extra: {} };
+      // Default built from KNOWLEDGE_SLOTS so a future slot can never drift here.
+      m.knowledge = m.knowledge || { ...Object.fromEntries(KNOWLEDGE_SLOTS.map((s) => [s, null])), extra: {} };
       for (const slot of KNOWLEDGE_SLOTS) if (mo.knowledge[slot] !== undefined) m.knowledge[slot] = mo.knowledge[slot];
       if (mo.knowledge.extra) m.knowledge.extra = { ...(m.knowledge.extra || {}), ...mo.knowledge.extra };
     }

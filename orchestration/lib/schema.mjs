@@ -8,7 +8,8 @@
 // Each validator returns { valid: boolean, errors: string[] } — errors are
 // path-qualified (e.g. "members[2].gates.test: expected string|null").
 
-export const WORKSPACE_SCHEMA = "orchestration/workspace@3";
+// @4 = added the `intelligence` knowledge slot (learned-guidance directory).
+export const WORKSPACE_SCHEMA = "orchestration/workspace@4";
 export const RUN_SCHEMA = "orchestration/run@1";
 export const CONFIG_SCHEMA = "orchestration/config@1";
 export const OVERRIDES_SCHEMA = "orchestration/overrides@1";
@@ -21,16 +22,32 @@ export const TOPOLOGIES = ["single-repo", "monorepo", "multi-repo"];
 export const GATE_KEYS = ["convention", "lint", "test", "build"];
 // Fixed per-member knowledge-link slots. Each is a resolved path or null
 // (null = no link OR the file is absent — consumers treat both the same).
-// Anything outside these slots lives in the free-form `extra` object.
-export const KNOWLEDGE_SLOTS = ["claude_md", "skills", "rubrics"];
+// `intelligence` is a DIRECTORY path (like `skills`) — the member's learned-
+// guidance entries dir. Anything outside these slots lives in the free-form
+// `extra` object.
+export const KNOWLEDGE_SLOTS = ["claude_md", "skills", "rubrics", "intelligence"];
 // Plugin settings. Setting 1 (plugin on/off everywhere) is delegated to Claude
 // Code's built-in `enabledPlugins` and deliberately not modelled here.
 //   readiness_check          — the onboarding nudge when a workspace is UNconfigured
 //   proactive_orchestration  — when a workspace IS configured, prime the main session
 //                              to route code work through /orchestrate (off = only on demand)
-// Both are booleans, default ON.
-export const CONFIG_KEYS = ["readiness_check", "proactive_orchestration"];
-export const CONFIG_DEFAULTS = { schema: CONFIG_SCHEMA, readiness_check: true, proactive_orchestration: true };
+//   intelligence             — capture learned behavioral guidance from user corrections
+//                              and inject it into dispatch briefs; OFF = feature fully inert.
+// All are booleans, default ON.
+// CONFIG_SCHEMA stays config@1: on-disk layers validate as `partial` and full
+// validation only runs on the merged object (which includes defaults), so adding
+// a key is additive-compatible — no bump needed.
+export const CONFIG_KEYS = ["readiness_check", "proactive_orchestration", "intelligence"];
+export const CONFIG_DEFAULTS = { schema: CONFIG_SCHEMA, readiness_check: true, proactive_orchestration: true, intelligence: true };
+// Intelligence entries: learned behavioral guidance captured from user
+// corrections (one skill-like .md file per entry; flat `key: value` frontmatter,
+// parsed by lib/intelligence.mjs). `type` routes an entry to a workflow phase.
+export const INTELLIGENCE_ENTRY_SCHEMA = "orchestration/intelligence-entry@1";
+export const INTELLIGENCE_TYPES = ["planning", "implementation", "review", "all"];
+export const INTELLIGENCE_STATUSES = ["candidate", "active", "superseded"];
+export const INTELLIGENCE_SCOPES = ["member", "workspace"];
+// v1 capture-trigger enum; extend when new capture triggers ship.
+export const INTELLIGENCE_SOURCES = ["user-correction"];
 export const RUN_STATUSES = ["planning", "executing", "complete", "blocked"];
 // Canonical workflow phases, in order. The run manifest records one {id,status} per
 // phase so progress through the workflow is tracked programmatically (in code + JSON),
@@ -187,6 +204,67 @@ export function validateConfig(obj, { partial = false } = {}) {
   // partial (an on-disk override layer) only present keys are checked.
   for (const k of CONFIG_KEYS) {
     if (!partial || obj[k] !== undefined) checkType(errs, k, obj[k], isBool, "boolean");
+  }
+  return { valid: errs.length === 0, errors: errs };
+}
+
+// --- intelligence entry -------------------------------------------------------
+
+const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+// Validate a PARSED intelligence entry (flat frontmatter object + `body` with the
+// three hoisted sections). Unknown keys fail loudly, mirroring validateKnowledge /
+// validateConfig, so a frontmatter typo can't silently drop a field.
+export function validateIntelligenceEntry(obj) {
+  const errs = [];
+  if (obj == null || typeof obj !== "object" || Array.isArray(obj)) {
+    return { valid: false, errors: ["root: expected an object"] };
+  }
+  if (obj.schema !== INTELLIGENCE_ENTRY_SCHEMA) {
+    errs.push(`schema: expected "${INTELLIGENCE_ENTRY_SCHEMA}", got ${JSON.stringify(obj.schema)}`);
+  }
+  const kebab = (path, v) => {
+    if (!isString(v) || !KEBAB_RE.test(v)) {
+      errs.push(`${path}: expected a kebab-case name (/^[a-z0-9]+(-[a-z0-9]+)*$/), got ${JSON.stringify(v)}`);
+    } else if (v.length > 64) {
+      errs.push(`${path}: name too long (${v.length} > 64 chars)`);
+    }
+  };
+  kebab("name", obj.name);
+  if (!isString(obj.description) || obj.description.length === 0) {
+    errs.push(`description: expected a non-empty string, got ${JSON.stringify(obj.description)}`);
+  } else if (obj.description.includes("\n")) {
+    errs.push("description: must be a single line (contains a newline)");
+  }
+  checkEnum(errs, "type", obj.type, INTELLIGENCE_TYPES);
+  checkEnum(errs, "status", obj.status, INTELLIGENCE_STATUSES);
+  checkEnum(errs, "scope", obj.scope, INTELLIGENCE_SCOPES);
+  for (const k of ["provenance_run", "provenance_task", "provenance_date"]) {
+    if (!isString(obj[k]) || obj[k].length === 0) {
+      errs.push(`${k}: expected a non-empty string, got ${JSON.stringify(obj[k])}`);
+    }
+  }
+  checkEnum(errs, "provenance_source", obj.provenance_source, INTELLIGENCE_SOURCES);
+  if (obj.supersedes !== undefined) kebab("supersedes", obj.supersedes);
+  if (obj.body == null || typeof obj.body !== "object" || Array.isArray(obj.body)) {
+    errs.push("body: expected an object with trigger, directive, why");
+  } else {
+    for (const k of ["trigger", "directive", "why"]) {
+      if (!isString(obj.body[k]) || obj.body[k].length === 0) {
+        errs.push(`body.${k}: expected a non-empty string, got ${JSON.stringify(obj.body[k])}`);
+      }
+    }
+    for (const k of Object.keys(obj.body)) {
+      if (!["trigger", "directive", "why"].includes(k)) errs.push(`body: unknown intelligence-entry key "${k}"`);
+    }
+  }
+  const KNOWN = new Set([
+    "schema", "name", "description", "type", "status", "scope",
+    "provenance_run", "provenance_task", "provenance_date", "provenance_source",
+    "supersedes", "body",
+  ]);
+  for (const k of Object.keys(obj)) {
+    if (!KNOWN.has(k)) errs.push(`unknown intelligence-entry key "${k}"`);
   }
   return { valid: errs.length === 0, errors: errs };
 }

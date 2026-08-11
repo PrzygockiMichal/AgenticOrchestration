@@ -14,6 +14,19 @@ export function orchestrationDir(root) {
   return path.join(root, ".claude", "orchestration");
 }
 
+// Learned-guidance (intelligence) entries dir at a root.
+export function intelligenceDir(root) {
+  return path.join(orchestrationDir(root), "intelligence");
+}
+
+// Same convention resolved for a member. For member path "." this equals
+// intelligenceDir(workspaceRoot) — the single-repo collapse: workspace and
+// member scope share ONE directory (the `scope` field on entries still records
+// the intent).
+export function memberIntelligenceDir(workspaceRoot, memberPath) {
+  return intelligenceDir(path.resolve(workspaceRoot, memberPath === "." ? "" : memberPath));
+}
+
 export function profilePaths(root, topology) {
   const dir = orchestrationDir(root);
   const local = topology !== "multi-repo";
@@ -25,6 +38,7 @@ export function profilePaths(root, topology) {
     rendered: path.join(dir, `${stem}.md`),     // human-readable rendered view
     draft: path.join(dir, `${stem}.json.draft`),// interrupted-setup checkpoint
     overrides: path.join(dir, "overrides.local.json"), // durable user overrides (Phase B)
+    intelligence: intelligenceDir(root),        // learned-guidance entries dir
   };
 }
 
