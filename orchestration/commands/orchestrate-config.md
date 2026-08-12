@@ -52,8 +52,11 @@ the config is personal/gitignored, so there is nothing canonical to reset to).
    node ${CLAUDE_PLUGIN_ROOT}/lib/overrides.mjs apply <draft> <overrides> --out <profile>
    node ${CLAUDE_PLUGIN_ROOT}/lib/profile.mjs render <profile> --out <rendered.md>
    ```
-5. **Apply the gitignore actions**, then **delete the draft** (only after a successful
-   derive, so an interrupted run can still resume from it).
+5. **Apply the gitignore actions** (the proposed patterns include `.claude/reports/`,
+   `.claude/orchestration/*.local.*` where applicable, and
+   `.claude/orchestration/intelligence/` — learned-guidance entries are personal),
+   then **delete the draft** (only after a successful derive, so an interrupted run
+   can still resume from it).
 6. **Offer to auto-save reports (deliberate question).** Ask the user once via
    `AskUserQuestion`: *"Allow orchestration to write engineer/reviewer/architect reports
    under `.claude/reports/` without a permission prompt each time?"* (Recommend **yes** —
@@ -95,8 +98,10 @@ through it:
 1. Load the current profile (`workspace.json` / `.local.json`) so you present **real**
    members and their current values. If none exists, offer `init` instead.
 2. **Menu 1 — target surface:** a **plugin setting** (`readiness_check` — the
-   unconfigured-workspace onboarding nudge; or `proactive_orchestration` — when
-   configured, prime the session to route code work through `/orchestrate`) or a
+   unconfigured-workspace onboarding nudge; `proactive_orchestration` — when
+   configured, prime the session to route code work through `/orchestrate`; or
+   `intelligence` — capture learned guidance from your corrections and inject it
+   into dispatch briefs; off = fully inert) or a
    **profile field** (per member). `AskUserQuestion`.
 3. **If a setting:** ask the value (`true|false`); write with
    `node ${CLAUDE_PLUGIN_ROOT}/lib/config.mjs set <global|workspace> <key> <value>`
@@ -104,8 +109,8 @@ through it:
 4. **If a profile field:**
    - **Menu 2 — member:** pick from the real members.
    - **Menu 3 — what to set:** the member's **`stack` label** · a knowledge slot
-     (`claude_md` / `skills` / `rubrics`) · add/edit a custom **extra** link · a
-     `gate` · append a `note`.
+     (`claude_md` / `skills` / `rubrics` / `intelligence`) · add/edit a custom
+     **extra** link · a `gate` · append a `note`.
    - **Value step (contextual):** a `stack` → ask for a short free-text label
      (e.g. `Rust`, `Claude Code plugin (markdown + zero-dep node .mjs)`); no
      disk-existence check applies. A slot/gate/link
@@ -113,7 +118,9 @@ through it:
      `extra` link → ask the link **name** then the path. **The `skills` slot is the
      single `.claude/skills` FOLDER path — never a list, never one entry per skill
      (Claude Code discovers the skills inside it automatically). Do not bulk-add skills
-     to `extra` either.**
+     to `extra` either. The `intelligence` slot follows the same rule: the single
+     `.claude/orchestration/intelligence/` DIRECTORY path — never a list, never one
+     entry per learned-guidance file (entries are read via `lib/intelligence.mjs`).**
    - **Write** via the deterministic writer:
      `node ${CLAUDE_PLUGIN_ROOT}/lib/overrides.mjs set <overrides> <member> <field> <value>`
      (resolve `<field>` yourself from the menu choices — the user never types it).
@@ -128,6 +135,11 @@ Render, don't hand-summarize:
 - `node ${CLAUDE_PLUGIN_ROOT}/lib/profile.mjs render <profile>` — the workspace profile.
 - `node ${CLAUDE_PLUGIN_ROOT}/lib/config.mjs show <root>` — effective settings + sources.
 - `node ${CLAUDE_PLUGIN_ROOT}/lib/overrides.mjs show <overrides>` — the durable overrides.
+- `node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs list <intelligence-dir>` — the current
+  learned-guidance set (run once per dir: the workspace dir plus each member's dir;
+  identical in single-repo). The dirs come from
+  `node ${CLAUDE_PLUGIN_ROOT}/lib/paths.mjs <root> <topology>` (its `intelligence` key) —
+  never hand-derive them.
 - `node ${CLAUDE_PLUGIN_ROOT}/lib/version.mjs check <profile>` — the plugin version that
   generated the profile vs the installed plugin, and the upgrade **severity**
   (`current` / `patch` / `minor` / `major` / `ahead` / `unknown`). Surface the severity's

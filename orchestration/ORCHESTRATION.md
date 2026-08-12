@@ -31,6 +31,10 @@ When in doubt, ask the user — never silently decide to skip.
 - **chuck-engineer** — the single generic implementer for **all** code work (frontend, backend, services, data, systems, CLI, game/engine — whatever the repo is)
 - **chuck-code-reviewer** — reviews completed engineering work using per-task `code-review-rubric` + global integration synthesis
 
+Apart from the `chuck-*` specialists (it is never dispatched for tasks):
+
+- **orchestration-intelligence** — meta agent, background extraction of learned guidance from user corrections (see the "Intelligence" section)
+
 Specialists are generic. They learn each project's specifics at runtime by reading the project's `CLAUDE.md`. Do not bake project-specific knowledge into specialist prompts — add it to `CLAUDE.md` instead.
 
 **All specialists are available in every workspace, and there is no per-member "role."** Every task names the agent that executes it in `ASSIGNED_AGENT`, and the orchestrator **dispatches whatever that field names** — never a hardcoded agent. Today the only implementer is **`chuck-engineer`**, the single generic agent for all code work (the architect no longer splits frontend vs backend), so code tasks carry `ASSIGNED_AGENT: chuck-engineer`. The field is the seam for any future non-code task type (e.g. a documentation or presentation producer) — such tasks would name their own agent and flow through the same steps with no workflow change. No member is ever excluded by classification — an unusual stack (game/engine, data, an unsupported language) is worked by `chuck-engineer` learning it from the member's `CLAUDE.md`.
@@ -69,18 +73,19 @@ Specialists are generic. They learn each project's specifics at runtime by readi
      - **Mode B — run all, then review (parallel where deps allow).** Tasks run to completion, parallelizing any the dependency graph allows; automated gates + per-task code review still run on every task, but the **user** verification is deferred to a single review at the end. Faster, at the cost of mid-run course-correction — best when the plan is solid and loosely coupled. **Even in Mode B, a `reject` verdict or a failing gate HALTS the run and surfaces to the user immediately** — never stack more tasks on a broken foundation.
    - **Confirm execution order with the user once.** The architect's plan provides the order; the user can adjust.
    - **Per-task mechanics — identical in both modes.** For each task (skip any the manifest already marks `done`):
-     1. **Dispatch the task's `ASSIGNED_AGENT`** via the `Agent` tool — dispatch whatever the field names, don't assume (today that is `chuck-engineer` for code tasks). For task-file dispatch, pass the task file path AND the bundle path. For inline dispatch, pass the contract directly. Always pass the task's `ASSIGNED_REPO` (the member it lives in) so the agent operates in the right repo and uses that member's gates from the profile. Mark the task `in_progress` in the manifest.
+     1. **Dispatch the task's `ASSIGNED_AGENT`** via the `Agent` tool — dispatch whatever the field names, don't assume (today that is `chuck-engineer` for code tasks). For task-file dispatch, pass the task file path AND the bundle path. For inline dispatch, pass the contract directly. Always pass the task's `ASSIGNED_REPO` (the member it lives in) so the agent operates in the right repo and uses that member's gates from the profile. Append the effective intelligence block per the Intelligence section (phase `implementation`). Mark the task `in_progress` in the manifest.
      2. **Read the assigned agent's report** (in the assigned member's `reports_dir`, `.../<assigned-agent>/<ISO-timestamp>.md`). Record its path in the manifest. **When the agent returns, do NOT commit or offer to commit — the only next step is the independent gate check (sub-step 3), then code review (sub-step 4). A finished task is not a finished run.**
      3. **Independently verify the gates.** Do NOT trust the engineer's self-reported `CHECKS`. Run `node lib/gates.mjs <workspace.json> <ASSIGNED_REPO>` — it executes that member's recorded gate commands in the member's path and emits observed `pass|fail|n/a` per gate (it auto-uses a non-mutating variant for common formatters (eslint `--fix` dropped; prettier/black/`ruff format`/`cargo fmt`/rustfmt → `--check`) — best-effort, so an unrecognized in-place formatter could still touch files; pass `--mutate` if you deliberately want the mutating form, whose edits then join this task's diff). Pipe the `observed` block into `lib/manifest.mjs gates <run.json> <task-id> '<json>'`. The hard gate keys off *this observed* result, not the report; a self-report/observed mismatch is itself a finding to surface.
-     4. **Dispatch `chuck-code-reviewer` for this task.** Pass the task file path, the engineer's report path, the task's `ASSIGNED_REPO`, the manifest's observed gate results, and the diff scope — scoped to that member with the manifest's baseline (`git -C <member-path> diff <task-baseline>..HEAD` covering only this task's files). Reviewer runs `code-review-rubric` once and writes a review to the member's `reports_dir/chuck-code-reviewer/<ISO-timestamp>.md` with `VERDICT: approve | revise | reject`. Record the review path + verdict in the manifest.
+     4. **Dispatch `chuck-code-reviewer` for this task.** Pass the task file path, the engineer's report path, the task's `ASSIGNED_REPO`, the manifest's observed gate results, and the diff scope — scoped to that member with the manifest's baseline (`git -C <member-path> diff <task-baseline>..HEAD` covering only this task's files). Append the effective intelligence block (phase `review`). Reviewer runs `code-review-rubric` once and writes a review to the member's `reports_dir/chuck-code-reviewer/<ISO-timestamp>.md` with `VERDICT: approve | revise | reject`. Record the review path + verdict in the manifest.
      5. **Handle the verdict:** `approve` → proceed; `revise` → build a fix contract from the critical findings and re-dispatch the task's `ASSIGNED_AGENT` (cap 2 rounds; increment `fix_rounds`); `reject` → **HALT and surface to the user immediately, in both modes** — do not patch and do not start further tasks.
    - **The mode changes only the USER verification cadence:**
      - **Mode A (sequential) — hard stop after every task.** When a task's automated gate + review are done, post **one compact message, then end your turn**:
        - A brief summary: what the task changed (files: count + notable paths), the observed gate results, the reviewer's verdict and any critical findings. **Link** the review file and the engineer report — do NOT paste diffs or long content (it buries the review and scrolls it away).
        - End with a single short question: approve and continue, request changes, or pause?
+       - If intelligence candidates are pending, append the candidate line(s) and fold accept/drop into the single closing question per the Intelligence section — still one message, one question, one stop.
        - Then **STOP — end the turn.** Output nothing after the question: no commit suggestion, no extra questions, no "next steps", and do not begin the next task. The user decides in their next message.
-       - On approve → mark the task `done` and move to the next. On request-changes → build a fix contract from their feedback and re-dispatch. Tasks are strictly sequential — no parallel batches, never run ahead.
-     - **Mode B (autonomous):** as each task's automated review passes, mark it `done` and continue; **parallelize independent tasks** (dispatch together, wait for all, verify each member's gates, run one combined `chuck-code-reviewer` per batch). After **all** tasks complete, post **one compact final message** (per-task file lists + verdicts, observed gates, links to the reviews) ending with a single question (approve / request changes / pause), then **end your turn** — no commit offer, no extra questions. Folded together with the integration review below. The user decides in their next message.
+       - On approve → mark the task `done` and move to the next. On request-changes → build a fix contract from their feedback and re-dispatch; request-changes is a capture trigger (background-dispatch `orchestration-intelligence` alongside the fix contract, per the Intelligence section). Tasks are strictly sequential — no parallel batches, never run ahead.
+     - **Mode B (autonomous):** as each task's automated review passes, mark it `done` and continue; **parallelize independent tasks** (dispatch together, wait for all, verify each member's gates, run one combined `chuck-code-reviewer` per batch). After **all** tasks complete, post **one compact final message** (per-task file lists + verdicts, observed gates, links to the reviews) ending with a single question (approve / request changes / pause), then **end your turn** — no commit offer, no extra questions. If intelligence candidates are pending, append the candidate line(s) and fold accept/drop into that single closing question per the Intelligence section. Folded together with the integration review below. The user decides in their next message.
 
 6. **(Reserved.)** Per-specialist report handling is now part of step 5.
 
@@ -140,15 +145,170 @@ status/updated`, `active_members[].baseline`, `execution_order`, `tasks[]` (each
 observed result not the assigned agent's claim, `user_verified`, `fix_rounds`), and
 `integration_review`.
 
+## Intelligence (learned behavioral guidance)
+
+**Intelligence** is learned *behavioral* guidance, distinct from factual knowledge
+(which belongs in `CLAUDE.md`): each entry names a **trigger** (when the situation
+recurs), a **directive** (what to do differently), and a **why** (the incident that
+proved it). Storage: one `.md` per entry under
+`<workspace-root>/.claude/orchestration/intelligence/` (workspace scope) and
+`<member-path>/.claude/orchestration/intelligence/` (member scope; single-repo: both
+resolve to the same directory). Each dir's `INDEX.md` is a derived view. ALL reads
+and writes go through `node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs` — never
+hand-edit entry files or `INDEX.md`.
+
+**Enablement.** Governed by the `intelligence` config key:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/lib/config.mjs get intelligence <root>
+```
+
+(default `true`). When `false` the feature is **FULLY INERT**: no extractor dispatch,
+no brief injection, no gate lines, no question clause — every intelligence action in
+this file is conditional on this key. Check once per run at Phase 0 and remember the
+answer.
+
+**Capture trigger (v1: user corrections ONLY).** Dispatch extraction when — and only
+when — the user corrects course:
+
+- (a) requests changes at a per-task verification gate;
+- (b) rejects or requests changes to a plan at plan approval;
+- (c) corrects the orchestrator or an agent's output inline mid-run.
+
+NOT triggers: plain approvals, scope answers, preference questions, reviewer
+findings.
+
+**Background dispatch (never a stop).** On a trigger, dispatch
+`orchestration-intelligence` via the Agent tool IN THE BACKGROUND — in the same turn
+as, and alongside, the actual handling of the correction (the fix contract, the
+architect re-dispatch, etc.). Never wait on it before responding to the user, and
+never make it its own message. Dispatch inputs (they must match the agent's
+Expected-input block in `agents/orchestration-intelligence.md`):
+
+```
+CORRECTION: <the user's correction text, verbatim>
+CONTEXT: <what was corrected — task file / plan.md / report paths + the run id; "pre-run" during planning>
+MEMBER: <member id + absolute member path — when the correction is task-bound>
+INTELLIGENCE_DIRS: <workspace + member intelligence dirs, absolute (identical in single-repo)>
+```
+
+If the result has not returned by the time the next gate message is composed, surface
+it at the FOLLOWING gate — never block. **This agent returns its report as
+final-message text only — it writes NO file under any `reports_dir`, and the run
+manifest never records a report path for it** (a deliberate deviation from the
+specialist report-file pattern, justified by background dispatch; resume logic must
+not expect one).
+
+Reading the result:
+
+- Any `STATUS: none` means **nothing to surface** — it covers both "the correction
+  wasn't intelligence" and "the dispatch was malformed" (a required field missing).
+  On `STATUS: none`, check the NOTES line for a malformed-dispatch hint before
+  assuming the rubric simply failed; if the dispatch was malformed, fix the inputs
+  and re-dispatch (still in the background).
+- If the agent reports that `add` failed on a **name collision** (the CLI error text
+  suggests "use supersede"), that suggestion is NOT for the agent: supersede
+  decisions belong to the orchestrator/user at a gate, never to the extractor. When
+  re-dispatching, tell the agent to pick a different `name` or set
+  `supersedes: <existing-name>` in its payload — never to run the `supersede` verb
+  itself.
+- Extraction failure never blocks a gate: no candidate line appears, and the failure
+  is at most mentioned in passing if the agent reported it in NOTES.
+
+**Surfacing contract (exact wording).** Candidates surface as APPENDED CONTENT on the
+next existing verification-gate message — never a new stop, never a second question,
+never an `AskUserQuestion` panel.
+
+Single candidate — one line placed immediately BEFORE the closing question:
+
+```
+Intelligence: 1 candidate from your correction — [<name>](<entry-path>): <description>
+```
+
+Multiple candidates — a header line + one bullet each, same position:
+
+```
+Intelligence: <N> candidates from your correction:
+- [<name>](<entry-path>): <description>
+```
+
+The gate's single closing question gains a folded clause and remains ONE question,
+e.g.:
+
+```
+Approve and continue, request changes, or pause — and accept or drop the intelligence candidate(s)?
+```
+
+The message still ends with that one question, then END TURN. The hard-stop rule is
+unchanged and restated here: never a new stop, one message, ONE question, then end
+turn.
+
+**Resolution.** From the user's reply:
+
+- **accept**, candidate WITHOUT `supersedes` →
+  `node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs promote <dir> <name>`
+- **accept**, candidate WITH `supersedes: <old>` →
+  `node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs supersede <dir> <old> <name>`
+  (NOT `promote` — the CLI refuses to promote a supersedes-carrying candidate
+  precisely so old and new can never both be active; the `supersede` verb activates
+  the new entry and retires the old in one step)
+- **drop** →
+  `node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs drop <dir> <name>`
+  (deletes the file — candidates leave no tombstone)
+
+If the user answers only the task question and ignores the candidate, carry it to the
+next gate (do not nag mid-message; do not auto-promote). Candidates still unresolved
+at the final integration message are surfaced there once, under the same folding
+rule; if still unresolved they persist as `candidate` and the next run's FIRST gate
+surfaces them.
+
+**In-force semantics.** Newly written candidates are immediately in force for
+subsequent dispatches in the SAME run (`effective` is invoked with `--candidates`);
+persistence into future runs requires acceptance (status `active`).
+
+**Injection into dispatch briefs (observational — workers need no changes).** Before
+each specialist dispatch, compute the effective set:
+
+```
+node ${CLAUDE_PLUGIN_ROOT}/lib/intelligence.mjs effective --phase <phases> --candidates <workspace-dir> <member-dir>
+```
+
+Workspace dir FIRST, member dir SECOND — the member dir wins `name` collisions
+(single-repo: pass the one dir once). Phase per specialist:
+
+- `chuck-architect` → `planning`
+- `chuck-engineer` (any implementer named by `ASSIGNED_AGENT`) → `implementation`
+- `chuck-code-reviewer` → `review` (the mapping yields implementation+review+all —
+  reviewers verify compliance)
+- `chuck-plan-reviewer` → `planning,review`
+
+The command's JSON elements carry `name`, `trigger`, `directive`, `why`, and `path`
+directly (`effective` hoists the parsed body — build the block from that JSON, with
+no per-entry file reads). If the set is non-empty, append to the dispatch message a
+block built from that JSON:
+
+```
+INTELLIGENCE (learned directives — apply them; flag a conflict with your contract instead of ignoring either):
+- [<name>] <trigger> → <directive>
+```
+
+(one line per entry; append the entry `path` for full context). Empty set or feature
+disabled → append nothing. No worker agent knows this feature exists — intelligence
+reaches specialists only as ordinary dispatch-brief content, so no edit to any
+`chuck-*` agent is ever needed and future external agents participate automatically.
+
+**Provenance.** Entries record run/task/date/source; always pass the run id in
+CONTEXT so extraction is auditable.
+
 ## Planning phase (architect path)
 
 **The human reviews the plan first; the plan-reviewer is a second opinion afterward.** The user owns high-level scope and intent, so they see the plan before any automated review runs — the plan-reviewer's job is then to catch the lower-level gaps the user is likely to miss, against the plan the user has actually endorsed. Running it earlier wastes a pass on a plan that is about to change.
 
-1. **Dispatch chuck-architect** with the user's request, any constraints, and the active member set (with each member's path + gate commands from the profile). Architect reads each active member, explores relevant code, decomposes the work into tasks (each with an `ASSIGNED_AGENT` and an `ASSIGNED_REPO` member, with order and dependencies), and writes a bundle. The bundle is workspace-level: it goes to `<workspace-root>/.claude/reports/chuck-architect/<ISO-timestamp>/` (uniform across topologies). Bundle contains `plan.md` (master) plus one `task-NN-<slug>.md` per task. Plan-review reports live alongside the bundle in the same workspace-level reports tree; engineer and code-review reports live in each touched member's own `reports_dir`.
+1. **Dispatch chuck-architect** with the user's request, any constraints, and the active member set (with each member's path + gate commands from the profile). Append the effective intelligence block (phase `planning`). Architect reads each active member, explores relevant code, decomposes the work into tasks (each with an `ASSIGNED_AGENT` and an `ASSIGNED_REPO` member, with order and dependencies), and writes a bundle. The bundle is workspace-level: it goes to `<workspace-root>/.claude/reports/chuck-architect/<ISO-timestamp>/` (uniform across topologies). Bundle contains `plan.md` (master) plus one `task-NN-<slug>.md` per task. Plan-review reports live alongside the bundle in the same workspace-level reports tree; engineer and code-review reports live in each touched member's own `reports_dir`.
 
-2. **User review of the plan (first).** Present the bundle to the user with **clickable links to `plan.md` and each `task-NN-*.md`** so they read the real contracts, not a summary. Ask for feedback on the individual tasks and the overall approach. If the user wants changes → re-dispatch the architect with their feedback and re-present. Loop until the user approves the plan.
+2. **User review of the plan (first).** Present the bundle to the user with **clickable links to `plan.md` and each `task-NN-*.md`** so they read the real contracts, not a summary. Ask for feedback on the individual tasks and the overall approach. If the user wants changes → re-dispatch the architect with their feedback and re-present. Loop until the user approves the plan. A plan rejection or change request is a capture trigger — background-dispatch `orchestration-intelligence` per the Intelligence section while re-dispatching the architect.
 
-3. **Dispatch chuck-plan-reviewer (after user approval).** Pass the approved bundle path. Reviewer runs the `plan-review-rubric` skill once per task (deterministic per-task checks) plus a global synthesis pass (cross-task issues), and writes a single review file to `.claude/reports/chuck-plan-reviewer/<ISO-timestamp>.md` with `VERDICT: approve | revise | reject`.
+3. **Dispatch chuck-plan-reviewer (after user approval).** Pass the approved bundle path. Append the effective intelligence block (phases `planning,review`). Reviewer runs the `plan-review-rubric` skill once per task (deterministic per-task checks) plus a global synthesis pass (cross-task issues), and writes a single review file to `.claude/reports/chuck-plan-reviewer/<ISO-timestamp>.md` with `VERDICT: approve | revise | reject`.
 
 4. **Surface the review to the user as a second opinion.** Link the review file and summarize its findings — these are gaps the user may have missed, not an automated gate. The user decides:
    - findings worth acting on → re-dispatch the architect with them, then back to step 2 (the user re-approves the changed plan).
@@ -165,7 +325,7 @@ For tickets the user has explicitly opted to skip planning on:
 
 2. **Confirm the contract with the user** before dispatch.
 
-3. **Dispatch the contract's `ASSIGNED_AGENT`.** Pass the contract inline (no bundle path, since there is no bundle), plus the `ASSIGNED_REPO` member.
+3. **Dispatch the contract's `ASSIGNED_AGENT`.** Pass the contract inline (no bundle path, since there is no bundle), plus the `ASSIGNED_REPO` member. The same injection rule applies — append the effective intelligence block per the Intelligence section (phase `implementation`).
 
 4. **Run the per-task gate** exactly as in workflow step 5's per-task mechanics: open a run manifest (skip-path location), capture the member baseline, read the report, **independently verify the gates**, dispatch `chuck-code-reviewer` for the one task, handle the verdict, and run the user verification gate. (This is a single-task run, so the execution-mode question does not apply — you verify the one task with the user.) Then integrate (step 8).
 

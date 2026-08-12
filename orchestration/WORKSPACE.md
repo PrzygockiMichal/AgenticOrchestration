@@ -20,12 +20,17 @@ it to a gitignored location and adds the necessary `.gitignore` entries:
 
 - **single-repo / monorepo:** `<repo>/.claude/orchestration/workspace.local.json`
   (source of truth) plus a generated `workspace.local.md` view. The `.local.*` suffix
-  marks them personal; setup adds `.claude/orchestration/*.local.*` + `.claude/reports/`
-  to the repo's `.gitignore`.
+  marks them personal; setup adds `.claude/orchestration/*.local.*` +
+  `.claude/orchestration/intelligence/` + `.claude/reports/` to the repo's `.gitignore`.
 - **multi-repo:** `<workspace-root>/.claude/orchestration/workspace.json` (source of
   truth) plus a generated `workspace.md` view. The parent folder is not a repo, so it
   is inherently un-shared (no `.local` suffix needed); setup still adds `.claude/reports/`
-  to each **member** repo's `.gitignore`, since engineer/review reports land there.
+  + `.claude/orchestration/intelligence/` to each **member** repo's `.gitignore`, since
+  engineer/review reports and learned-guidance entries land there.
+
+Learned-guidance (intelligence) entries under `.claude/orchestration/intelligence/`
+are likewise **personal in v1** — they capture how *you* correct this workspace and are
+never committed (sharing is deliberately deferred).
 
 The location pattern is **uniform**: the profile always lives at
 `<workspace-root>/.claude/orchestration/`, and workspace-level work products always at
@@ -94,7 +99,7 @@ and `.claude/`.
 The mechanical work is **code**, not prose-the-LLM-interprets. These zero-dependency
 node scripts under `${CLAUDE_PLUGIN_ROOT}/lib/` are the deterministic substrate:
 
-- **`detect.mjs`** — runs the detection algorithm; emits a `workspace@3` JSON object
+- **`detect.mjs`** — runs the detection algorithm; emits a `workspace@4` JSON object
   (facts incl. per-member `knowledge` links + `decisions_needed`) on stdout. `node detect.mjs [root]`.
 - **`overrides.mjs`** — the durable overrides layer + derivation engine:
   `apply <detected> <overrides>` (profile = detected ⊕ overrides), `set`/`unset` (the
@@ -103,8 +108,12 @@ node scripts under `${CLAUDE_PLUGIN_ROOT}/lib/` are the deterministic substrate:
   human `.md` view). It no longer merges — derivation lives in `overrides.mjs`.
 - **`config.mjs`** — plugin settings (the readiness check): cascade
   defaults < global < per-workspace; `show`/`get`/`set`.
-- **`paths.mjs`** — resolves the profile / overrides / draft locations for a root +
-  topology, so nothing re-derives the file convention in prose.
+- **`paths.mjs`** — resolves the profile / overrides / draft / intelligence-dir locations
+  for a root + topology, so nothing re-derives the file convention in prose.
+- **`intelligence.mjs`** — deterministic writer/reader for learned-guidance entries
+  (`add`/`list`/`effective`/`promote`/`drop`/`supersede`/`index`/`validate`); the ONLY
+  thing that ever touches entry files — each dir's `INDEX.md` is derived, never
+  hand-edited. See the Intelligence section of `ORCHESTRATION.md`.
 - **`schema.mjs`** — the validators (the single definition of every data shape).
 - **`manifest.mjs` / `gates.mjs`** — run-time substrate (see `ORCHESTRATION.md`).
 
@@ -131,11 +140,12 @@ detected), which is surfaced rather than silently dropped.
 
 ### Knowledge links (per member)
 
-Each member records `knowledge`: fixed slots (`claude_md`, `skills`, `rubrics`) — each
-a resolved path or `null` (null = no link *or* the file is absent; consumers treat both
-the same) — plus `extra`, a free-form object for user-defined links (e.g. a runbook, an
-ADR dir). Detection fills `claude_md`/`skills`; `rubrics` and `extra` are user-supplied
-via overrides. Agents read these instead of re-hunting for a repo's knowledge each run.
+Each member records `knowledge`: fixed slots (`claude_md`, `skills`, `rubrics`,
+`intelligence`) — each a resolved path or `null` (null = no link *or* the file is absent;
+consumers treat both the same) — plus `extra`, a free-form object for user-defined links
+(e.g. a runbook, an ADR dir). Detection fills `claude_md`/`skills`/`intelligence`;
+`rubrics` and `extra` are user-supplied via overrides. Agents read these instead of
+re-hunting for a repo's knowledge each run.
 
 **`skills` is the single `.claude/skills` FOLDER path — never a list and never one entry
 per skill.** Claude Code discovers the individual skills inside that folder on its own
@@ -144,10 +154,16 @@ per skill.** Claude Code discovers the individual skills inside that folder on i
 docs — do **not** bulk-populate it with one entry per skill. One folder link scales to
 any number of skills with zero maintenance.
 
+**`intelligence` follows the same folder-link rule:** it is the single
+`.claude/orchestration/intelligence/` DIRECTORY path — never a list and never one entry
+per learned-guidance file. Detection fills it when `<member>/.claude/orchestration/intelligence/`
+exists on disk (else `null`); the entries inside are read through `lib/intelligence.mjs`,
+never enumerated into the profile.
+
 ### Settings
 
 Beyond Claude Code's built-in `enabledPlugins` (plugin on/off everywhere, not reinvented
-here), the plugin owns **two boolean switches** in `config.mjs`, both default ON, cascading
+here), the plugin owns **three boolean switches** in `config.mjs`, all default ON, cascading
 global (`~/.claude/orchestration/config.json`) < per-workspace
 (`.claude/orchestration/config.local.json`). All hooks share one deterministic decision
 (`lib/readiness.mjs`) and read the settings at each invocation.
@@ -162,6 +178,11 @@ global (`~/.claude/orchestration/config.json`) < per-workspace
   route non-trivial code work through `/orchestrate` per `ORCHESTRATION.md`. Turn it off
   when you'd rather invoke `/orchestrate` on purpose and not be steered toward it by
   default; the workspace stays configured, the hook just stays quiet.
+- **`intelligence`** — learned behavioral guidance (default ON). When on, the
+  orchestrator captures user corrections during runs as accept/drop candidates and
+  injects accepted entries into dispatch briefs by phase (see the Intelligence section
+  of `ORCHESTRATION.md`). When off the feature is **fully inert** — no extraction, no
+  injection, no gate lines.
 
 **Auto-saving reports.** A plugin can't grant itself permissions, so report writes
 (engineer/reviewer/architect output under `.claude/reports/`) prompt by default. During
@@ -195,7 +216,7 @@ profile fields through guided menus; **`show`** renders the current config.
 longer interpreted prose.** `orchestration-settings-manager` RUNS the script
 (`node ${CLAUDE_PLUGIN_ROOT}/lib/detect.mjs <root>`) and consumes its JSON output;
 the steps below are that script's **specification** (and the fallback if node is
-unavailable). The script emits a `workspace@3` object with `decisions_needed`
+unavailable). The script emits a `workspace@4` object with `decisions_needed`
 populated; it never guesses — insufficient evidence becomes a decision, not a value.
 
 Every conclusion must come from a command output or a file read — never a guess. If
@@ -221,8 +242,9 @@ invented value.
    - `claude_md` present? (absent is allowed but flagged — gates will be weaker)
    - `gates` from `package.json` scripts (`lint`/`test`/`test:e2e`/`build`/`typecheck`,
      exact command strings) or the stack equivalent. No script → `none` (never fabricate).
-   - `knowledge` links — resolved paths to the member's `CLAUDE.md` and `.claude/skills`
-     (each a path or `null`; `rubrics` and custom `extra` links are filled via overrides).
+   - `knowledge` links — resolved paths to the member's `CLAUDE.md`, `.claude/skills`,
+     and `.claude/orchestration/intelligence/` dir (each a path or `null`; `rubrics` and
+     custom `extra` links are filled via overrides).
 
 3. **No role classification.** Members record **stack facts only** (the `stack` label
    from step 2). There is deliberately **no per-member owning agent**: every workspace
@@ -263,7 +285,7 @@ the persistent registry; scope is chosen per execution (one, some, or all member
 
 ## Workspace profile format
 
-The profile is **`workspace.json`** — schema `orchestration/workspace@3`, the exact
+The profile is **`workspace.json`** — schema `orchestration/workspace@4`, the exact
 shape `lib/schema.mjs` validates and `lib/detect.mjs` emits. It is a **derived**
 artifact (detected facts ⊕ the durable `overrides.local.json`, produced by
 `lib/overrides.mjs apply`), regenerated by `init`/`update` — never hand-edited. It is
@@ -273,7 +295,7 @@ not parse it programmatically.
 
 ```jsonc
 {
-  "schema": "orchestration/workspace@3",
+  "schema": "orchestration/workspace@4",
   "plugin_version": "<plugin semver that generated this profile>",  // stamped by detect.mjs; drives upgrade severity
   "generated": "<ISO-8601>",
   "topology": "single-repo | monorepo | multi-repo",
@@ -288,7 +310,8 @@ not parse it programmatically.
     "gates": { "convention": "<cmd|null>", "lint": "<cmd|null>",
                "test": "<cmd|null>", "build": "<cmd|null>" },   // null = no gate (never fabricated)
     "knowledge": { "claude_md": "<path|null>", "skills": "<path|null>",
-                   "rubrics": "<path|null>", "extra": { } },     // resolved links; extra = free-form user links
+                   "rubrics": "<path|null>", "intelligence": "<path|null>",
+                   "extra": { } },     // resolved links; extra = free-form user links
     "reports_dir": "<path where this member's reports go>",
     "notes": ["<detected per-member gotcha>", "..."]
   }],
@@ -351,6 +374,9 @@ Two version signals sit above per-run drift, both resolved by `/orchestrate-conf
 - **Schema validity (hard).** If the on-disk profile fails the validator (e.g. an older
   `workspace@N`), the readiness check marks the workspace **stale** and routes to `update`
   — it is a configured workspace that must be re-derived, not an unconfigured one.
+  The @3→@4 bump (new `intelligence` knowledge slot) is exactly this case: older
+  profiles fail validation, readiness flags them stale, and `/orchestrate-config update`
+  re-derives losslessly from the durable overrides.
 - **`plugin_version` gap (soft).** Every profile records the plugin version that
   produced it. `lib/version.mjs` grades the gap to the installed plugin as
   `current` / `patch` (optional) / `minor` (refresh recommended) / `major` (reconfigure —

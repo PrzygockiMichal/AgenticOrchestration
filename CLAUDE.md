@@ -12,9 +12,10 @@ meta-repo: the plugin developed here is also installed and running in this very 
   - `skills/` — skills (one folder per skill, `SKILL.md` inside)
   - `hooks/hooks.json` — session/prompt hooks (readiness check, onboarding nudge)
   - `lib/` — **zero-dependency** node `.mjs` scripts: the deterministic substrate
-    (detect, overrides, profile, config, manifest, gates, schema, paths, …)
+    (detect, overrides, profile, config, manifest, gates, schema, paths, intelligence, …)
   - `ORCHESTRATION.md` — the orchestrator workflow (the core spec)
   - `WORKSPACE.md` — workspace topologies, profile schema, tooling contract
+- `tests/` — zero-dep `node:test` suite for `lib/` (see Checks)
 - `.claude-plugin/marketplace.json` — marketplace listing for local installs
 
 ## Stack & conventions
@@ -48,4 +49,4 @@ it in sync.
 ## Docs to read before working here
 
 - `orchestration/ORCHESTRATION.md` — the workflow contract all agents follow
-- `orchestration/WORKSPACE.md` — profile schema (`workspace@3`), lib tooling contract
+- `orchestration/WORKSPACE.md` — profile schema (`workspace@4`), lib tooling contract

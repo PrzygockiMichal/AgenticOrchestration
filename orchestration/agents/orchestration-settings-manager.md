@@ -67,7 +67,7 @@ Use these exact paths; do not hand-derive them.
    ```
    node ${CLAUDE_PLUGIN_ROOT}/lib/detect.mjs <workspace-root>
    ```
-   It prints a `workspace@3` object and self-validates before printing. Exit **2** =
+   It prints a `workspace@4` object and self-validates before printing. Exit **2** =
    nothing to orchestrate → return `STATUS: blocked` with the script's message; exit
    **1** = script errored → capture stderr and report it, do not hand-roll a substitute.
 2. **Sanity-check — don't redo.** Spot-check two or three facts against the repo (a
@@ -78,14 +78,18 @@ Use these exact paths; do not hand-derive them.
    you add a decision recommending a `stack` override — never edit or note the value. **Knowledge links come
    from `detect.mjs` verbatim — the `skills` link is the single `.claude/skills` FOLDER,
    never per-skill. Do not expand it into individual skills, and never add per-skill
-   entries to `extra`; Claude Code discovers the skills inside the folder itself.**
+   entries to `extra`; Claude Code discovers the skills inside the folder itself. The
+   `intelligence` slot follows the same rule: the single
+   `.claude/orchestration/intelligence/` DIRECTORY path (detect-filled, `null` when
+   absent) — never enumerate the entries inside it.**
 3. **Write the detected draft** verbatim to the `draft` path from `paths.mjs`. This is
    the interrupted-setup checkpoint (the onboarding hook keys on it). If a draft already
    exists (interrupted setup) and an `overrides.local.json` is partway built, read both:
    report which decisions are already answered (present in overrides) so the command
    re-asks only the still-open ones.
 4. **Propose gitignore actions** for the command to apply (you do not apply them):
-   `.claude/reports/` in each member; and for single-repo / monorepo also
+   `.claude/reports/` and `.claude/orchestration/intelligence/` in each member (and at
+   the workspace root for single-repo / monorepo); for single-repo / monorepo also
    `.claude/orchestration/*.local.*`.
 
 ## MODE: update  (re-detect an existing workspace)
@@ -119,7 +123,7 @@ DRAFT_OR_DERIVED: <path you wrote>
 MEMBERS (from detect.mjs):
   - <id> | <path> | <stack> | branch=<branch> | claude_md=<yes|no>
     gates: convention=<…> lint=<…> test=<…> build=<…>
-    knowledge: claude_md=<…> skills=<…> rubrics=<…> extra=[<names>]
+    knowledge: claude_md=<…> skills=<…> rubrics=<…> intelligence=<…> extra=[<names>]
 
 DECISIONS NEEDED (verbatim from decisions_needed — each with recommended default):
   - [<member>] <question>  (recommend: <default>)
