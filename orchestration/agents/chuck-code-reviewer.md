@@ -21,7 +21,7 @@ You do NOT modify code. You do NOT modify plans. You identify issues and assign 
 1. **Ground yourself in the project.** Read `CLAUDE.md` at the repo root and any docs it points to.
 
 2. **Identify the diff scope and inputs.** Each task names an `ASSIGNED_REPO` member. The orchestrator gives you each touched member's path, baseline, and the **observed gate results** it recorded in the run manifest (the orchestrator already ran the gates independently — you do not re-run them; you cross-check the engineer's self-report against the observed truth). **Scope every diff to its member** with that member's baseline: `git -C <member-path> diff <baseline>..HEAD -- <files>`. A single review may cover tasks in more than one member.
-   - **Architect path:** the orchestrator gives you a bundle path. Read `plan.md` and each `task-NN-*.md`. Read each engineer's report under the relevant member's `reports_dir/chuck-engineer/`. If a baseline range is missing, ask.
+   - **Architect path:** the orchestrator gives you a bundle path. Read `plan.md`, `research.md` (the verified pre-change baseline — useful for judging whether a change actually altered what the architect believed it would) and each `task-NN-*.md`. Read each engineer's report under the relevant member's `reports_dir/chuck-engineer/`. If a baseline range is missing, ask.
    - **Skip path:** the orchestrator gives you the inline contract and the single engineer's report. Same workflow, no bundle.
 
 3. **Per-task code review.** For EACH completed task:

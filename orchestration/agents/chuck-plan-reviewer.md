@@ -20,7 +20,7 @@ You do NOT rewrite the plan or its tasks — you identify issues. You are delibe
 
 1. **Ground yourself in the project.** Read `CLAUDE.md` at the repo root and any docs it points to.
 
-2. **Read the master plan** (`<bundle>/plan.md`) in full. Note the task index and dependency graph for later synthesis. Do not review the master plan against the rubric — the rubric is per-task; master-plan issues surface in global synthesis.
+2. **Read the master plan** (`<bundle>/plan.md`) and `<bundle>/research.md` in full. Note the task index and dependency graph for later synthesis. Do not review either against the rubric — the rubric is per-task; plan- and research-level issues surface in global synthesis.
 
 3. **Per-task review.** For EACH `task-NN-*.md` file in the bundle:
    - Invoke the `plan-review-rubric` skill with the task file path.
@@ -35,6 +35,10 @@ You do NOT rewrite the plan or its tasks — you identify issues. You are delibe
    - **Member allocation:** Does each task's `ASSIGNED_REPO` name a real member, and do its `FILES_AFFECTED` actually live in that member? Any task whose files cross member boundaries (should have been split)?
    - **OOS consistency:** Does any task touch something the master plan declares out-of-scope?
    - **Open questions handling:** Are open questions surfaced in `plan.md`, or buried inside individual tasks where the user might miss them?
+   - **Decomposition rationale:** Does `plan.md`'s `DECOMPOSITION RATIONALE` actually justify this split and ordering, or merely describe it? No task file can own this, so it is yours to judge. Challenge any dependency edge forced by an incidental file collision (two tasks appending to one barrel) rather than a real contract dependency — that is serialization that could have been parallel.
+   - **Testing plan:** Is `plan.md`'s `TESTING PLAN` a genuinely runnable, ordered checklist, deduplicated from the tasks' `TESTS`? Spot-check at least two cited affordances against the actual templates and confirm they exist and are wired. A check the user cannot perform is a **critical** finding — it makes the verification gate a no-op.
+   - **Plan/task duplication:** Does `plan.md` restate any task's `INTERFACE`, `FILES_AFFECTED`, `UX` or `DONE_WHEN`? That is a second source of truth which goes stale the moment a contract is revised. Flag it; the fix is to cut it from the plan, never to thin the task file.
+   - **New behavior:** Does `NEW BEHAVIOR` describe user-observable outcomes, and does every entry trace to at least one task? An entry no task delivers is a coverage gap; a task delivering nothing user-visible must be declared foundational rather than silently omitted.
 
 5. **Decide a verdict** based on combined per-task and global findings (criteria below).
 

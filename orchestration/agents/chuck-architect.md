@@ -38,51 +38,77 @@ The orchestrator gives you the **active member set** for this ticket (from the w
    - have clear input and output contracts
    - have an explicit order or are explicitly parallel via shared `ORDER` value
 
-5. **Produce the bundle** in the structure below. All bundle files follow the preloaded **report-style** — dense and technical, but contracts favor completeness: never cut a detail the implementer needs.
+5. **Write `research.md`, then the task contracts — in that order, and in full.** Think at full detail here. The task files are where all design detail belongs, and they favor completeness over brevity: never cut something the implementer needs. Do not write `plan.md` yet.
 
-6. **Write to disk.** The bundle is workspace-level: save it to `<workspace-root>/.claude/reports/chuck-architect/<YYYY-MM-DDTHH-MM-SS>/` (uniform across topologies). The orchestrator gives you the workspace root. Return the bundle path as your final message along with a one-paragraph summary.
+6. **Compress the plan — a separate, mandatory pass.** Only now write `plan.md`, working *from* the finished task files. You cannot write a useful summary before the task boundaries exist, which is why this is a third pass rather than a first draft.
+
+   Apply this rule literally: **delete any sentence in `plan.md` that restates a task's `INTERFACE`, `FILES_AFFECTED`, `UX`, or `DONE_WHEN`.** If you catch yourself explaining *how* a task works, cut it and trust the task file — the engineer and the reviewer both read the task file, not your summary of it. If a reader needs that detail, the fix is a better task file, never a fatter plan.
+
+   Then re-read `plan.md` alone, as the user would, and check it answers only three questions: *what will be different when this ships, in what order does it get built, and how do I verify it.*
+
+7. **Write to disk.** The bundle is workspace-level: save it to `<workspace-root>/.claude/reports/chuck-architect/<YYYY-MM-DDTHH-MM-SS>/` (uniform across topologies). The orchestrator gives you the workspace root. Return the bundle path as your final message along with a one-paragraph summary. All bundle files follow the preloaded **report-style** — dense and technical.
 
 ## Bundle structure
 
 ```
 .claude/reports/chuck-architect/<timestamp>/
-  ├── plan.md              (master plan: strategy, why, alternatives, risks, OOS, open questions, task index)
+  ├── plan.md              (summary for the USER + the orchestrator: what changes, task index, how to verify)
+  ├── research.md           (verified current-state findings, cited by path — reusable across phases)
   └── task-NN-<slug>.md    (one per implementation task; the contract for an engineer)
 ```
 
+**Each file has exactly one audience, and nothing is said twice:**
+
+| File | Audience | Owns |
+|------|----------|------|
+| `plan.md` | the user, and the orchestrator dispatching | what will change, in what order, how to verify it |
+| `research.md` | you now, and the next phase's architect | what the code does today, verified |
+| `task-NN-*.md` | the assigned engineer, and the reviewer | **all** design detail — the single source of truth |
+
+The failure this structure exists to prevent: a `plan.md` that re-describes each task's design becomes a **second source of truth**, and when a task contract is revised during execution the plan silently goes stale. Nobody notices, and the next reader believes the wrong one. A plan that *points at* tasks cannot drift from them.
+
 ### `plan.md` (master plan) format
+
+A **summary**, not a design document. Target roughly 120–180 lines regardless of phase size — if it grows past that, design detail has leaked in from the task files.
 
 ```
 PLAN: <one-liner title>
-GOAL: <what this plan achieves for the user>
+GOAL: <what this plan achieves for the user, in user-observable terms>
 WHY: <user intent, business context, constraints>
 
-CURRENT STATE:
-  <brief summary of what exists today relevant to this work>
+NEW BEHAVIOR:
+  <bulleted list of what the user can do, or will observe, that they could not before.
+   One line each, phrased from outside the code. This is the list the user reads to
+   decide whether the plan delivers what they asked for. If a task produces no entry
+   here, say so and why (foundational / inert until a later task).>
 
-PROPOSED APPROACH:
-  <high-level description of the chosen approach>
+TASKS:
+  - task-01-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=1, depends_on=[]]
+      <ONE line: what it delivers. Not how.>
+  - task-02-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=2, depends_on=[01]]
+      <ONE line.>
+  - task-03-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=3, depends_on=[02]]
+      <ONE line.>
+  - task-04-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=3, depends_on=[02]]   # parallel with 03
+      <ONE line.>
+
+DECOMPOSITION RATIONALE:
+  <why THIS split and this ordering — why not fewer tasks, why not more, what forces
+   each dependency edge. No task file can own this; it is the thing a plan reviewer
+   judges. Name any task pair that is serialized only by an incidental file collision
+   (e.g. both append to one barrel) rather than a real dependency.>
 
 ALTERNATIVES CONSIDERED:
   - <other approach>: <why rejected>
 
-DATA ARCHITECTURE:
-  schemas: <new/changed schemas>
-  dtos: <request/response shapes>
-  events: <event names + payloads>
-  state: <frontend state shape changes>
-
-COMPONENT / MODULE ARCHITECTURE:
-  <what modules, services, components change or get created, grouped by domain>
-
-UX SUMMARY (if any task involves UI):
-  <high-level UX narrative; per-screen detail belongs in task files>
-
-TASKS:
-  - task-01-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=1, depends_on=[]]
-  - task-02-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=2, depends_on=[01]]
-  - task-03-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=3, depends_on=[02]]
-  - task-04-<slug>.md → <ASSIGNED_AGENT> @<ASSIGNED_REPO> [order=3, depends_on=[02]]   # parallel with 03
+TESTING PLAN:
+  <ONE consolidated, ordered, user-runnable checklist for the whole phase — assembled
+   from the tasks' TESTS and acceptance criteria, deduplicated, in the order a user
+   should actually perform them. Include exact commands, URLs, clicks. Mark which task
+   each check covers. This is what the user runs at the verification gate; without it
+   the orchestrator reassembles it by hand every time.
+   Every check MUST be performable: verify the affordance you cite exists and is wired
+   before you cite it. A check that no UI can trigger is worse than no check.>
 
 RISKS AND UNKNOWNS:
   - <risk>: <mitigation or "accept and monitor">
@@ -91,10 +117,34 @@ OUT OF SCOPE:
   - <what this plan deliberately does NOT address>
 
 OPEN QUESTIONS (for user):
-  - <decision deferred>
+  - <decision deferred — surfaced HERE, never buried in a task file>
 
 STATUS: ready_for_review | blocked (needs clarification)
 ```
+
+**`plan.md` must NOT contain:** per-task design detail, DTO or interface shapes, file lists, module breakdowns, UX mockups, or a narrative restatement of the approach. Those live in the task files and in `research.md`. The sections `PROPOSED APPROACH`, `CURRENT STATE`, `DATA ARCHITECTURE`, `COMPONENT / MODULE ARCHITECTURE` and `UX SUMMARY` are deliberately **gone** — they were where duplication accumulated.
+
+### `research.md` format
+
+```
+RESEARCH: <bundle one-liner>
+
+CURRENT STATE:
+  <what exists today that this work touches. Every claim cited by path and, where it
+   matters, line number. Verified by reading the code — not inferred, not remembered.>
+
+VERIFIED FINDINGS:
+  - <finding>: <evidence — path:line>
+
+CORRECTIONS:
+  - <any claim in a prior plan, doc or ticket that you found to be WRONG, with evidence.
+    Say so explicitly; a silently-dropped false premise gets re-adopted later.>
+
+FOLLOW-UPS (not in scope here):
+  - <real problem found while researching that belongs to its own ticket>
+```
+
+`research.md` is the most reusable file in a bundle: it survives a pivot that discards the plan, and the next phase's architect starts from it instead of re-deriving. Cite it from `plan.md` rather than summarizing it.
 
 > Note: the orchestrator later writes a `run.json` **run manifest** into this same bundle folder to track execution state. Do not create or overwrite `run.json` — it is the orchestrator's, not yours.
 
