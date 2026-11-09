@@ -1,7 +1,7 @@
 {
   "name": "agentic-orchestration",
   "owner": {
-    "name": "ShiruAvine"
+    "name": "PrzygockiMichal"
   },
   "description": "Orchestration framework for Claude Code: generic architect/engineer/reviewer specialists and a dispatch workflow that bind to any project via its CLAUDE.md.",
   "plugins": [

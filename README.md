@@ -30,7 +30,7 @@ This repo is a **Claude Code marketplace** (`agentic-orchestration`) hosting one
 
 ```text
 # 1. Add this marketplace (one time, per machine)
-/plugin marketplace add ShiruAvine/AgenticOrchestration
+/plugin marketplace add PrzygockiMichal/AgenticOrchestration
 
 # 2. Install the plugin
 /plugin install orchestration@agentic-orchestration
